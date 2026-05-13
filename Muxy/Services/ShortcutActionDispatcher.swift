@@ -168,6 +168,8 @@ struct ShortcutActionDispatcher {
             guard appState.navigation.canGoForward else { return false }
             appState.goForward()
             return true
+        case .toggleVoiceRecording:
+            return false
         case .selectTab1,
              .selectTab2,
              .selectTab3,

@@ -199,6 +199,7 @@ struct AgentsFocusedTabSelectionTests {
 
         #expect(locations.map(\.tab.id) == [firstRoot.id, child.id])
         #expect(locations.map(\.area.id) == [rootArea.id, childArea.id])
+        #expect(locations.map(\.topLevelTabID) == [firstRoot.id, firstRoot.id])
     }
 
     @Test("keeps child agent tabs when their parent is not an agent")
@@ -224,6 +225,7 @@ struct AgentsFocusedTabSelectionTests {
 
         #expect(locations.map(\.tab.id) == [child.id])
         #expect(locations.first?.area.id == childArea.id)
+        #expect(locations.first?.topLevelTabID == parent.id)
     }
 }
 

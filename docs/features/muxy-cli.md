@@ -10,6 +10,8 @@ Install the CLI from **Muxy → Install CLI**.
 
 Muxy first tries to install `muxy` to `/usr/local/bin/muxy`. If that needs admin access, macOS prompts for permission. If installation there fails, Muxy falls back to `~/bin/muxy` or `~/.local/bin/muxy`.
 
+The installed command is a versioned wrapper around the CLI bundled with Muxy, so it follows app updates automatically and can receive future wrapper fixes. Muxy replaces writable standalone CLI copies automatically. For a protected `/usr/local/bin/muxy`, it presents an update sheet after the main window is ready and requests administrator approval only after you choose **Update**. Choose **Don't ask again** to suppress that wrapper update; **Muxy → Install CLI** remains available for manual recovery.
+
 After installing, verify it is on your `PATH`:
 
 ```bash

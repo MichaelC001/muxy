@@ -84,6 +84,34 @@ struct ExtensionManifestTests {
         #expect(command.action.requiredPermission == .panelsWrite)
     }
 
+    @Test("decodes home views")
+    func decodesHomeViews() throws {
+        let json = #"""
+        {
+            "name": "overview",
+            "version": "1.0.0",
+            "homeViews": [
+                {
+                    "id": "board",
+                    "title": "Overview",
+                    "icon": "rectangle.3.group",
+                    "entry": "overview/index.html",
+                    "defaultData": { "showIdle": false }
+                }
+            ]
+        }
+        """#
+
+        let manifest = try JSONDecoder().decode(ExtensionManifest.self, from: Data(json.utf8))
+        let home = try #require(manifest.homeViews.first)
+
+        #expect(home.id == "board")
+        #expect(home.title == "Overview")
+        #expect(home.icon == .symbol("rectangle.3.group"))
+        #expect(home.entry == "overview/index.html")
+        #expect(home.defaultData == .object(["showIdle": .bool(false)]))
+    }
+
     @Test("openModal defaults dismissOnOutsideClick to true when omitted")
     func openModalDefaultsDismiss() throws {
         let json = #"""
@@ -1606,6 +1634,247 @@ struct ExtensionManifestTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         #expect(throws: ExtensionLoadError.sidebarEntryEmpty(sidebarID: "main")) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("loads a home view and validates its entry")
+    func loadsHomeView() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-view",
+                "version": "1.0.0",
+                "homeViews": [
+                    {
+                        "id": "overview",
+                        "title": "Overview",
+                        "icon": { "svg": "assets/overview.svg" },
+                        "entry": "overview/index.html"
+                    }
+                ]
+            }
+            """,
+            files: [
+                "assets/overview.svg": "<svg></svg>",
+                "overview/index.html": "<html></html>",
+            ]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let loaded = try ExtensionManifestLoader.load(from: directory)
+
+        #expect(loaded.manifest.homeView(id: "overview")?.title == "Overview")
+        #expect(loaded.manifest.homeView(id: "overview")?.icon == .svg("assets/overview.svg"))
+    }
+
+    @Test("rejects malformed home view icons", arguments: [
+        "\"\"",
+        #"{ "symbol": "" }"#,
+        #"{ "svg": "" }"#,
+        #"{ "symbol": "star", "svg": "assets/icon.svg" }"#,
+        #"{ "symbol": "star", "unexpected": "value" }"#,
+    ])
+    func rejectsMalformedHomeViewIcon(icon: String) throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-invalid-icon",
+                "version": "1.0.0",
+                "homeViews": [
+                    {
+                        "id": "overview",
+                        "title": "Overview",
+                        "icon": \(icon),
+                        "entry": "index.html"
+                    }
+                ]
+            }
+            """,
+            files: ["index.html": "<html></html>"]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(throws: ExtensionLoadError.self) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects a home view with an empty title")
+    func rejectsHomeViewEmptyTitle() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-empty-title",
+                "version": "1.0.0",
+                "homeViews": [
+                    { "id": "overview", "title": "", "entry": "index.html" }
+                ]
+            }
+            """,
+            files: ["index.html": "<html></html>"]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(throws: ExtensionLoadError.homeViewEmptyTitle(homeViewID: "overview")) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects a home view with an empty id")
+    func rejectsHomeViewEmptyID() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-empty-id",
+                "version": "1.0.0",
+                "homeViews": [
+                    { "id": "", "title": "Overview", "entry": "index.html" }
+                ]
+            }
+            """
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(throws: ExtensionLoadError.homeViewEmptyID) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects duplicate home view ids")
+    func rejectsDuplicateHomeViewIDs() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-duplicate-id",
+                "version": "1.0.0",
+                "homeViews": [
+                    { "id": "overview", "title": "Overview", "entry": "index.html" },
+                    { "id": "overview", "title": "Overview", "entry": "index.html" }
+                ]
+            }
+            """,
+            files: ["index.html": "<html></html>"]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(throws: ExtensionLoadError.duplicateHomeView("overview")) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects a home view with an empty entry")
+    func rejectsHomeViewEmptyEntry() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-empty-entry",
+                "version": "1.0.0",
+                "homeViews": [
+                    { "id": "overview", "title": "Overview", "entry": "" }
+                ]
+            }
+            """
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(throws: ExtensionLoadError.homeViewEntryEmpty(homeViewID: "overview")) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects a home view with a missing entry")
+    func rejectsHomeViewMissingEntry() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-missing-entry",
+                "version": "1.0.0",
+                "homeViews": [
+                    { "id": "overview", "title": "Overview", "entry": "missing.html" }
+                ]
+            }
+            """
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let entryURL = directory.appendingPathComponent("missing.html")
+
+        #expect(throws: ExtensionLoadError.homeViewEntryMissing(homeViewID: "overview", url: entryURL)) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects a home view entry outside its extension directory")
+    func rejectsHomeViewEntryOutsideDirectory() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-outside-entry",
+                "version": "1.0.0",
+                "homeViews": [
+                    { "id": "overview", "title": "Overview", "entry": "../outside.html" }
+                ]
+            }
+            """
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let entryURL = directory.appendingPathComponent("../outside.html")
+
+        #expect(throws: ExtensionLoadError.homeViewEntryOutsideDirectory(homeViewID: "overview", url: entryURL)) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects a home view with a missing SVG icon")
+    func rejectsHomeViewMissingSVG() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-missing-svg",
+                "version": "1.0.0",
+                "homeViews": [
+                    {
+                        "id": "overview",
+                        "title": "Overview",
+                        "entry": "index.html",
+                        "icon": { "svg": "assets/missing.svg" }
+                    }
+                ]
+            }
+            """,
+            files: ["index.html": "<html></html>"]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let iconURL = directory.appendingPathComponent("assets/missing.svg")
+
+        #expect(throws: ExtensionLoadError.homeViewSVGMissing(homeViewID: "overview", url: iconURL)) {
+            try ExtensionManifestLoader.load(from: directory)
+        }
+    }
+
+    @Test("rejects a home view SVG icon outside its extension directory")
+    func rejectsHomeViewSVGOutsideDirectory() throws {
+        let directory = try makeTemporaryExtension(
+            manifest: """
+            {
+                "name": "home-outside-svg",
+                "version": "1.0.0",
+                "homeViews": [
+                    {
+                        "id": "overview",
+                        "title": "Overview",
+                        "entry": "index.html",
+                        "icon": { "svg": "../outside.svg" }
+                    }
+                ]
+            }
+            """,
+            files: ["index.html": "<html></html>"]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let iconURL = directory.appendingPathComponent("../outside.svg")
+
+        #expect(throws: ExtensionLoadError.homeViewSVGOutsideDirectory(homeViewID: "overview", url: iconURL)) {
             try ExtensionManifestLoader.load(from: directory)
         }
     }

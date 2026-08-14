@@ -2,9 +2,9 @@
 
 Every extension is an npm + [Vite](https://vitejs.dev) project. Its manifest is the `muxy` object inside the `package.json` at the root of its directory.
 
-Identity (`name` and `version`) lives at the **top level** of `package.json` — npm's single source of truth. **Every other manifest field** (`description`, `background`, `events`, `permissions`, `tabTypes`, `fileOpeners`, `localizations`, `panels`, `popovers`, `sidebar`, `commands`, `topbarItems`, `statusBarItems`, `settings`, `remoteMethods`, `marketplace`) lives under the `muxy` key.
+Identity (`name` and `version`) lives at the **top level** of `package.json` — npm's single source of truth. **Every other manifest field** (`description`, `background`, `events`, `permissions`, `tabTypes`, `homeViews`, `fileOpeners`, `localizations`, `panels`, `popovers`, `sidebar`, `commands`, `topbarItems`, `statusBarItems`, `settings`, `remoteMethods`, `marketplace`) lives under the `muxy` key.
 
-`package.json` must also declare a `build` script. The publishing pipeline runs `npm run build` (Vite) and ships **only** the build output directory, `dist/`. The app installs and reads from `dist/`, so every entry/asset path inside `muxy` (popover/tab `entry`, `background`, marketplace `icon`/`screenshots`) resolves against the build output, not your source tree.
+`package.json` must also declare a `build` script. The publishing pipeline runs `npm run build` (Vite) and ships **only** the build output directory, `dist/`. The app installs and reads from `dist/`, so every entry/asset path inside `muxy` (home-view, popover, and tab `entry`; `background`; marketplace `icon` and `screenshots`) resolves against the build output, not your source tree.
 
 Because only `dist/` ships, **your `build` must copy `package.json` into `dist/`** — `vite build` emits your entry/asset paths but not the manifest. Without the copy, the published `dist/` has no manifest and fails to install. (It still loads in local dev via **Load Unpacked**, which falls back to the root `package.json`, so the gap surfaces only at validation or install time.) Append a copy step: `"build": "vite build && node scripts/copy-manifest.mjs"`. See [Contributing](contributing.md#3-build-and-develop-live) for the script; the vanilla starter kit already includes it.
 
@@ -53,6 +53,7 @@ All Muxy-specific manifest fields live under the `muxy` object.
 | `events` | string[] | no | Workspace events the extension may subscribe to. Local `extension.*` events are not declared here. See [Events](events.md). Defaults to empty. |
 | `commands` | object[] | no | Palette commands to register. See [Palette Commands](palette-commands.md). |
 | `tabTypes` | object[] | no | Webview tab types the extension exposes. See [Tabs](tabs.md). |
+| `homeViews` | object[] | no | Global full-window webviews shown outside project tab restoration. See [Home Views](home-views.md). |
 | `fileOpeners` | object[] | no | Project-file openers the extension contributes. Each opener references one of the extension's `tabTypes`; Muxy opens it with `{ filePath, line?, column?, source }` when a terminal link opens a file. See [File openers](tabs.md#file-openers). |
 | `localizations` | object[] | no | App-language providers backed by resource-only `.bundle` directories copied into `dist/`. See [Localizations](localizations.md). |
 | `panels` | object[] | no | Dockable/floating webview panels. See [Panels](panels.md). |
@@ -68,14 +69,14 @@ Extensions are disabled by default after loading and must be enabled explicitly 
 
 ## Icons
 
-Topbar and status-bar items accept an `icon` field in one of two forms:
+Home views, panels, sidebars, topbar items, and status-bar items accept an `icon` field in one of two forms:
 
 ```json
 { "icon": { "symbol": "puzzlepiece.extension" } }
 { "icon": { "svg": "assets/badge.svg" } }
 ```
 
-A bare string (`"icon": "puzzlepiece.extension"`) is shorthand for `{ "symbol": ... }`.
+A bare string (`"icon": "puzzlepiece.extension"`) is shorthand for `{ "symbol": ... }`. Icon values must be non-empty, and an object must contain exactly one of `symbol` or `svg`.
 
 - **`symbol`** — any SF Symbol name. Tinted with the chrome's foreground color.
 - **`svg`** — a path relative to the build output to a `.svg` file. The file must exist in `dist/` at load time, must not escape the extension directory, and must be at most 256 KiB. Rendered as a template image, so fills/strokes using `currentColor` (or a single solid color) pick up the chrome tint.

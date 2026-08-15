@@ -8,11 +8,13 @@ enum CreateWorktreeResult {
 
 struct WorktreeBranchOption: Equatable, Identifiable {
     let name: String
-    var id: String { name }
+    let reference: String
+    var id: String { reference }
 }
 
 struct WorktreeBranchLoadState: Equatable {
     var branchOptions: [WorktreeBranchOption] = []
+    var baseBranchOptions: [WorktreeBranchOption] = []
     var selectedExistingBranch = ""
     var selectedBaseBranch = ""
     private(set) var isLoading = true
@@ -21,19 +23,38 @@ struct WorktreeBranchLoadState: Equatable {
         isLoading = true
     }
 
-    mutating func finishLoading(branches: [String], defaultBranch: String?) {
-        branchOptions = branches.map(WorktreeBranchOption.init)
+    mutating func finishLoading(
+        branches: [String],
+        defaultBranch: String?,
+        remoteDefaultBranchReference: String?,
+        currentBranch: String?
+    ) {
+        branchOptions = branches.map { WorktreeBranchOption(name: $0, reference: $0) }
+        baseBranchOptions = branchOptions
+        if let defaultBranch, let remoteDefaultBranchReference, !branches.contains(defaultBranch) {
+            baseBranchOptions.insert(
+                WorktreeBranchOption(name: defaultBranch, reference: remoteDefaultBranchReference),
+                at: 0
+            )
+        }
         if selectedExistingBranch.isEmpty {
             selectedExistingBranch = branches.first ?? ""
         }
-        if selectedBaseBranch.isEmpty {
-            if let defaultBranch, branches.contains(defaultBranch) {
-                selectedBaseBranch = defaultBranch
-            } else {
-                selectedBaseBranch = branches.first ?? ""
-            }
-        }
         isLoading = false
+        guard selectedBaseBranch.isEmpty else { return }
+        if let defaultBranch, branches.contains(defaultBranch) {
+            selectedBaseBranch = defaultBranch
+            return
+        }
+        if let remoteDefaultBranchReference {
+            selectedBaseBranch = remoteDefaultBranchReference
+            return
+        }
+        if let currentBranch, branches.contains(currentBranch) {
+            selectedBaseBranch = currentBranch
+            return
+        }
+        selectedBaseBranch = ["develop", "main", "master"].first(where: branches.contains) ?? ""
     }
 
     mutating func failLoading() {
@@ -72,15 +93,16 @@ private struct WorktreeBranchPicker: View {
     }
 
     private var selectionButton: some View {
-        Button {
+        let selectedName = options.first { $0.reference == selection }?.name ?? selection
+        return Button {
             isPresented = true
         } label: {
             HStack(spacing: UIMetrics.spacing3) {
-                if selection.isEmpty {
+                if selectedName.isEmpty {
                     Text(L10n.resource("No branches"))
                         .foregroundStyle(MuxyTheme.fgDim)
                 } else {
-                    Text(selection)
+                    Text(selectedName)
                         .foregroundStyle(MuxyTheme.fg)
                 }
                 Spacer(minLength: UIMetrics.spacing3)
@@ -98,7 +120,7 @@ private struct WorktreeBranchPicker: View {
         .buttonStyle(.plain)
         .disabled(options.isEmpty)
         .accessibilityLabel(label)
-        .accessibilityValue(selection.isEmpty ? L10n.string("No branches") : selection)
+        .accessibilityValue(selectedName.isEmpty ? L10n.string("No branches") : selectedName)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             PopoverPicker(
                 items: options,
@@ -113,7 +135,7 @@ private struct WorktreeBranchPicker: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer(minLength: UIMetrics.spacing3)
-                        if option.name == selection {
+                        if option.reference == selection {
                             Image(systemName: "checkmark")
                                 .font(.system(size: UIMetrics.fontXS, weight: .bold))
                                 .foregroundStyle(MuxyTheme.accent)
@@ -129,7 +151,7 @@ private struct WorktreeBranchPicker: View {
     }
 
     private func select(_ option: WorktreeBranchOption) {
-        selection = option.name
+        selection = option.reference
         isPresented = false
     }
 }
@@ -194,7 +216,7 @@ struct CreateWorktreeSheet: View {
                     Text(L10n.resource("Base Branch")).font(.system(size: UIMetrics.fontFootnote)).foregroundStyle(MuxyTheme.fgMuted)
                     WorktreeBranchPicker(
                         label: L10n.string("Base Branch"),
-                        options: branchLoadState.branchOptions,
+                        options: branchLoadState.baseBranchOptions,
                         isLoading: branchLoadState.isLoading,
                         selection: $branchLoadState.selectedBaseBranch
                     )
@@ -519,9 +541,24 @@ struct CreateWorktreeSheet: View {
         do {
             async let branchesValue = gitRepository.listBranches(repoPath: project.path)
             async let defaultValue = gitRepository.defaultBranch(repoPath: project.path)
+            async let currentValue = try? gitRepository.currentBranch(repoPath: project.path)
             let branches = try await branchesValue
             let resolvedDefault = await defaultValue
-            branchLoadState.finishLoading(branches: branches, defaultBranch: resolvedDefault)
+            let currentBranch = await currentValue
+            let remoteDefaultBranchReference: String? = if let resolvedDefault, !branches.contains(resolvedDefault) {
+                await gitRepository.remoteTrackingBranchReference(
+                    repoPath: project.path,
+                    branch: resolvedDefault
+                )
+            } else {
+                nil
+            }
+            branchLoadState.finishLoading(
+                branches: branches,
+                defaultBranch: resolvedDefault,
+                remoteDefaultBranchReference: remoteDefaultBranchReference,
+                currentBranch: currentBranch
+            )
         } catch {
             branchLoadState.failLoading()
             errorMessage = error.localizedDescription

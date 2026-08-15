@@ -800,6 +800,19 @@ struct GitRepositoryService {
         return !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    func remoteTrackingBranchReference(
+        repoPath: String,
+        remote: String = "origin",
+        branch: String
+    ) async -> String? {
+        let reference = "refs/remotes/\(remote)/\(branch)"
+        let result = try? await runGit(
+            repoPath: repoPath,
+            arguments: ["show-ref", "--verify", "--quiet", reference]
+        )
+        return result?.status == 0 ? reference : nil
+    }
+
     func listRemoteBranches(repoPath: String) async throws -> [String] {
         let result = try await runGit(
             repoPath: repoPath,
@@ -822,12 +835,12 @@ struct GitRepositoryService {
     }
 
     func defaultBranch(repoPath: String) async -> String? {
-        if let cached = GitMetadataCache.shared.cachedDefaultBranch(repoPath: repoPath) {
+        if let cached = GitMetadataCache.shared.cachedDefaultBranch(context: context, repoPath: repoPath) {
             return cached
         }
         let resolved = await resolveDefaultBranch(repoPath: repoPath)
-        if resolved != nil {
-            GitMetadataCache.shared.storeDefaultBranch(resolved, repoPath: repoPath)
+        if let resolved {
+            GitMetadataCache.shared.storeDefaultBranch(resolved, context: context, repoPath: repoPath)
         }
         return resolved
     }

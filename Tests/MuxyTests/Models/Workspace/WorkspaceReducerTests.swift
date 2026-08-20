@@ -411,41 +411,6 @@ struct WorkspaceReducerTests {
         #expect(effects.paneIDsToRemove.count == 2)
     }
 
-    @Test("closing an owner pane promotes its surviving child")
-    func closeOwnerPanePromotesChild() {
-        let projectID = UUID()
-        let worktreeID = UUID()
-        var state = makeState(projectID: projectID, worktreeID: worktreeID)
-        let key = WorktreeKey(projectID: projectID, worktreeID: worktreeID)
-        let firstAreaID = state.focusedAreaID[key]!
-
-        _ = WorkspaceReducer.reduce(
-            action: .splitArea(AppState.SplitAreaRequest(
-                projectID: projectID,
-                areaID: firstAreaID,
-                direction: .horizontal,
-                position: .second
-            )),
-            state: &state
-        )
-
-        let root = state.workspaceRoots[key]!
-        let firstArea = root.findArea(id: firstAreaID)!
-        let ownerTab = firstArea.tabs[0]
-        let childTab = root.allTabs().first { $0.parentTabID == ownerTab.id }!
-
-        let effects = WorkspaceReducer.reduce(
-            action: .closePaneInWorktree(key: key, areaID: firstAreaID, tabID: ownerTab.id),
-            state: &state
-        )
-
-        #expect(state.workspaceRoots[key]?.allAreas().count == 1)
-        #expect(state.workspaceRoots[key]?.allTabs().map(\.id) == [childTab.id])
-        #expect(childTab.parentTabID == nil)
-        #expect(state.topLevelTabOrder[key] == [childTab.id])
-        #expect(effects.paneIDsToRemove == [ownerTab.content.pane!.id])
-    }
-
     @Test("closing a pinned top-level tab preserves its child panes")
     func closePinnedTopLevelTabPreservesChildPanes() {
         let projectID = UUID()

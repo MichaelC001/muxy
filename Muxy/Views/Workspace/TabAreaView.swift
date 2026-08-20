@@ -8,7 +8,7 @@ struct TabAreaView: View {
     let isActiveProject: Bool
     let projectID: UUID
     let onFocus: () -> Void
-    let onForceClosePane: () -> Void
+    let onForceCloseTab: () -> Void
     let onDropAction: (TabDragCoordinator.DropResult) -> Void
     @Environment(TabDragCoordinator.self) private var dragCoordinator
     @Environment(AppState.self) private var appState
@@ -39,7 +39,7 @@ struct TabAreaView: View {
             areaID: area.id,
             topLevelGroupID: topLevelGroupID,
             onFocus: onFocus,
-            onProcessExit: onForceClosePane,
+            onProcessExit: onForceCloseTab,
             onSplitRequest: { direction, position in
                 appState.dispatch(.splitArea(.init(
                     projectID: projectID,

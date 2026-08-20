@@ -116,8 +116,8 @@ struct AppStateLifecycleVetoTests {
         #expect(appState.pendingLastTabClose == nil)
     }
 
-    @Test("Close Pane preserves a child extension when closing its owner pane")
-    func childExtensionSurvivesOwnerAreaClose() async {
+    @Test("Close Pane lets a child extension veto closing its owner hierarchy")
+    func childExtensionVetoesOwnerAreaClose() async {
         let projectID = UUID()
         let worktreeID = UUID()
         let key = WorktreeKey(projectID: projectID, worktreeID: worktreeID)
@@ -154,45 +154,12 @@ struct AppStateLifecycleVetoTests {
         appState.closeArea(rootArea.id, projectID: projectID)
         await settle()
 
-        #expect(appState.workspaceRoots[key]?.allTabs().map(\.id) == [childTab.id])
-        #expect(childTab.parentTabID == nil)
-        #expect(bridge.askCount == 0)
+        #expect(appState.workspaceRoots[key]?.allTabs().count == 2)
+        #expect(bridge.askCount == 1)
     }
 
-    @Test("terminal process exit preserves a split child when the owner pane exits")
-    func ownerProcessExitPreservesSplitChild() {
-        let projectID = UUID()
-        let worktreeID = UUID()
-        let key = WorktreeKey(projectID: projectID, worktreeID: worktreeID)
-        let rootArea = TabArea(projectPath: "/tmp/test")
-        let rootTabID = rootArea.tabs[0].id
-        let childTab = TerminalTab(
-            pane: TerminalPaneState(projectPath: "/tmp/test"),
-            parentTabID: rootTabID
-        )
-        let childArea = TabArea(projectPath: "/tmp/test", existingTab: childTab)
-        let appState = AppState(
-            selectionStore: SelectionStoreStub(),
-            terminalViews: TerminalViewRemovingStub(),
-            workspacePersistence: WorkspacePersistenceStub()
-        )
-        appState.activeProjectID = projectID
-        appState.activeWorktreeID[projectID] = worktreeID
-        appState.workspaceRoots[key] = .split(SplitBranch(
-            direction: .horizontal,
-            first: .tabArea(rootArea),
-            second: .tabArea(childArea)
-        ))
-        appState.focusedAreaID[key] = rootArea.id
-
-        appState.forceClosePane(rootTabID, areaID: rootArea.id, projectID: projectID)
-
-        #expect(appState.workspaceRoots[key]?.allTabs().map(\.id) == [childTab.id])
-        #expect(childTab.parentTabID == nil)
-    }
-
-    @Test("Close Tab asks every child extension before any verdict resolves")
-    func ownerTabCloseAsksChildExtensionsConcurrently() async {
+    @Test("Close Pane asks every child extension before any verdict resolves")
+    func ownerAreaCloseAsksChildExtensionsConcurrently() async {
         let projectID = UUID()
         let worktreeID = UUID()
         let key = WorktreeKey(projectID: projectID, worktreeID: worktreeID)
@@ -243,7 +210,7 @@ struct AppStateLifecycleVetoTests {
             ExtensionSurfaceBridgeRegistry.shared.unregister(secondKey)
         }
 
-        appState.closeTab(rootTabID, areaID: rootArea.id, key: key)
+        appState.closeArea(rootArea.id, projectID: projectID)
         await settle()
 
         let requestsStartedTogether = firstBridge.askCount == 1 && secondBridge.askCount == 1
@@ -256,8 +223,8 @@ struct AppStateLifecycleVetoTests {
         #expect(appState.workspaceRoots[key]?.allTabs().map(\.id) == [unrelatedTabID])
     }
 
-    @Test("Close Pane does not confirm for a surviving child terminal")
-    func ownerAreaCloseDoesNotConfirmRunningChildTerminal() {
+    @Test("Close Pane asks for confirmation when a child terminal is running")
+    func ownerAreaCloseConfirmsRunningChildTerminal() {
         let originalPreference = UserDefaults.standard.object(
             forKey: TabCloseConfirmationPreferences.confirmRunningProcessKey
         )
@@ -300,9 +267,14 @@ struct AppStateLifecycleVetoTests {
 
         appState.closeArea(rootArea.id, projectID: projectID)
 
-        #expect(appState.pendingProcessTabClose == nil)
-        #expect(appState.workspaceRoots[key]?.allTabs().map(\.id) == [childTab.id])
-        #expect(!terminalViews.confirmationChecks.contains(childPane.id))
+        #expect(appState.pendingProcessTabClose == AppState.PendingTabClose(
+            key: key,
+            areaID: rootArea.id,
+            tabID: rootTabID
+        ))
+        #expect(appState.workspaceRoots[key]?.allTabs().count == 2)
+        #expect(terminalViews.confirmationChecks.contains(childPane.id))
+        appState.cancelCloseRunningTab()
     }
 
     private func settle() async {

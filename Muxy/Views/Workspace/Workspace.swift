@@ -214,8 +214,8 @@ private struct TopLevelTabGroupContent: View {
                 onFocus: {
                     selectPane(areaID: maximizedPane.area.id, tabID: maximizedPane.tab.id)
                 },
-                onForceCloseTab: {
-                    appState.forceCloseTab(
+                onForceClosePane: {
+                    appState.forceClosePane(
                         maximizedPane.tab.id,
                         areaID: maximizedPane.area.id,
                         projectID: project.id
@@ -239,8 +239,8 @@ private struct TopLevelTabGroupContent: View {
                 isActiveProject: isActiveProject,
                 projectID: project.id,
                 onSelectPane: selectPane,
-                onForceCloseTab: { areaID, tabID in
-                    appState.forceCloseTab(tabID, areaID: areaID, projectID: project.id)
+                onForceClosePane: { areaID, tabID in
+                    appState.forceClosePane(tabID, areaID: areaID, projectID: project.id)
                 },
                 onDropAction: handleDrop
             )

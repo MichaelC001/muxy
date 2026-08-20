@@ -7,7 +7,7 @@ struct PaneNode: View {
     let isActiveProject: Bool
     let projectID: UUID
     let onSelectPane: (UUID, UUID) -> Void
-    let onForceCloseTab: (UUID, UUID) -> Void
+    let onForceClosePane: (UUID, UUID) -> Void
     let onDropAction: (TabDragCoordinator.DropResult) -> Void
 
     var body: some View {
@@ -22,7 +22,7 @@ struct PaneNode: View {
                     isActiveProject: isActiveProject,
                     projectID: projectID,
                     onFocus: { onSelectPane(area.id, tab.id) },
-                    onForceCloseTab: { onForceCloseTab(area.id, tab.id) },
+                    onForceClosePane: { onForceClosePane(area.id, tab.id) },
                     onDropAction: onDropAction
                 )
             case let .split(branch, first, second):
@@ -35,7 +35,7 @@ struct PaneNode: View {
                     isActiveProject: isActiveProject,
                     projectID: projectID,
                     onSelectPane: onSelectPane,
-                    onForceCloseTab: onForceCloseTab,
+                    onForceClosePane: onForceClosePane,
                     onDropAction: onDropAction
                 )
             }

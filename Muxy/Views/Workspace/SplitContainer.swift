@@ -10,7 +10,7 @@ struct SplitContainer: View {
     let isActiveProject: Bool
     let projectID: UUID
     let onSelectPane: (UUID, UUID) -> Void
-    let onForceCloseTab: (UUID, UUID) -> Void
+    let onForceClosePane: (UUID, UUID) -> Void
     let onDropAction: (TabDragCoordinator.DropResult) -> Void
 
     var body: some View {
@@ -73,7 +73,7 @@ struct SplitContainer: View {
             isActiveProject: isActiveProject,
             projectID: projectID,
             onSelectPane: onSelectPane,
-            onForceCloseTab: onForceCloseTab,
+            onForceClosePane: onForceClosePane,
             onDropAction: onDropAction
         )
     }

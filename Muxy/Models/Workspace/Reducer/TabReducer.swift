@@ -287,6 +287,50 @@ enum TabReducer {
         SplitReducer.closeArea(areaID, key: key, state: &state, effects: &effects)
     }
 
+    static func closePane(
+        _ tabID: UUID,
+        areaID: UUID,
+        key: WorktreeKey,
+        state: inout WorkspaceState,
+        effects: inout WorkspaceSideEffects
+    ) {
+        guard let root = state.workspaceRoots[key],
+              let area = root.findArea(id: areaID),
+              let tab = area.tabs.first(where: { $0.id == tabID }),
+              !tab.isPinned
+        else { return }
+        guard tab.parentTabID == nil else {
+            closeTab(tabID, areaID: areaID, key: key, state: &state, effects: &effects)
+            return
+        }
+        let children = root.allTabs().filter { $0.parentTabID == tabID }
+        guard let promoted = children.first else {
+            closeTab(tabID, areaID: areaID, key: key, state: &state, effects: &effects)
+            return
+        }
+
+        for child in children {
+            child.parentTabID = promoted.id
+        }
+        promoted.parentTabID = nil
+        state.topLevelTabOrder[key] = state.topLevelTabOrder[key]?.map {
+            $0 == tabID ? promoted.id : $0
+        }
+        if let layout = state.topLevelTabLayouts[key] {
+            for group in layout.allGroups() {
+                group.tabIDs = group.tabIDs.map { $0 == tabID ? promoted.id : $0 }
+                if group.activeTabID == tabID {
+                    group.activeTabID = promoted.id
+                }
+            }
+        }
+        if let paneID = area.closeTab(tabID) {
+            effects.paneIDsToRemove.append(paneID)
+        }
+        guard area.tabs.isEmpty else { return }
+        SplitReducer.closeArea(areaID, key: key, state: &state, effects: &effects)
+    }
+
     static func sendTabToBackground(
         _ tabID: UUID,
         key: WorktreeKey,

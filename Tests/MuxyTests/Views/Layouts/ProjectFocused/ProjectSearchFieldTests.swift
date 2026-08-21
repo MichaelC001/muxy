@@ -58,6 +58,41 @@ struct ProjectSearchFieldTests {
         #expect(model.text == "Muxy")
     }
 
+    @Test("exit action invokes onExit handler")
+    func exitActionInvokesOnExitHandler() {
+        var didExit = false
+        let model = ProjectSearchFieldTestModel(text: "Muxy", isEnabled: true, isWide: true)
+        let field = ProjectSearchField(
+            text: Binding(
+                get: { model.text },
+                set: { model.text = $0 }
+            ),
+            isEnabled: true,
+            isWide: true,
+            onExit: { didExit = true }
+        )
+
+        #expect(!didExit)
+        field.exit()
+        #expect(didExit)
+    }
+
+    @Test("exit action clears text when no onExit handler is provided")
+    func exitActionClearsTextWithoutOnExitHandler() {
+        let model = ProjectSearchFieldTestModel(text: "Muxy", isEnabled: true, isWide: true)
+        let field = ProjectSearchField(
+            text: Binding(
+                get: { model.text },
+                set: { model.text = $0 }
+            ),
+            isEnabled: true,
+            isWide: true
+        )
+
+        field.exit()
+        #expect(model.text.isEmpty)
+    }
+
     private func hostingView(isEnabled: Bool, isWide: Bool) -> NSView {
         let view = ProjectSearchField(text: .constant(""), isEnabled: isEnabled, isWide: isWide)
             .frame(width: 220, height: UIMetrics.controlMedium)

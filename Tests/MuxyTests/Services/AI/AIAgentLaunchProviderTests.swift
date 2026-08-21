@@ -53,6 +53,16 @@ struct AIAgentLaunchProviderTests {
                     prompt,
                 ]
             ),
+            (
+                AntigravityProvider(),
+                [
+                    "--print",
+                    "--output-format",
+                    "text",
+                    "--mode=plan",
+                    prompt,
+                ]
+            ),
         ]
 
         for (provider, expectedArguments) in providers {

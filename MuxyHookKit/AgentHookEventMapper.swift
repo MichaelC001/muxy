@@ -24,7 +24,9 @@ public enum AgentHookEventMapper {
              "PreToolUse",
              "beforeSubmitPrompt",
              "userPromptSubmitted",
-             "preToolUse":
+             "preToolUse",
+             "PreInvocation",
+             "pre-invocation":
             return MappedAgentHookEvent(phase: .working, title: "", body: "")
         case "permission-request",
              "PermissionRequest":

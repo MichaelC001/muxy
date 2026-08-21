@@ -145,6 +145,8 @@ struct AgentHookBridgeMappingTests {
             "beforeSubmitPrompt",
             "userPromptSubmitted",
             "preToolUse",
+            "PreInvocation",
+            "pre-invocation",
         ]
     )
     func mapsWorkingAliases(event: String) {
@@ -243,6 +245,8 @@ struct AgentHookBridgeMappingTests {
         #expect(map(event: "stop-failure")?.body == "Session failed")
         #expect(map(event: "errorOccurred")?.body == "Session failed")
         #expect(map(event: "StopFailure", input: data(["title": "Failed safely"]))?.body == "Failed safely")
+        #expect(map(event: "PostInvocation") == nil)
+        #expect(map(event: "post-invocation") == nil)
     }
 
     @Test("Copilot errors finish only when they are not recoverable")

@@ -158,9 +158,12 @@ struct MainWindow: View {
     @AppStorage("muxy.sidebarExpanded") private var sidebarExpanded = false
     @State private var layoutStore = AppLayoutStore.shared
     @State private var extensionStore = ExtensionStore.shared
+    @State private var extensionTopbarRailOrderStore = ExtensionTopbarRailOrderStore.shared
     @AppStorage(SidebarSelection.storageKey) private var activeSidebarRaw = SidebarSelection.builtinValue
     @AppStorage(TopbarPreferences.actionsVisibleKey)
     private var showTopbarActions = TopbarPreferences.defaultActionsVisible
+    @AppStorage(TopbarPreferences.railVisibleKey)
+    private var showExtensionIconRail = TopbarPreferences.defaultRailVisible
     @AppStorage("muxy.showStatusBar") private var showStatusBar = true
     @AppStorage(HomeProjectPreferences.visibleKey) private var showHomeProject = HomeProjectPreferences.defaultVisible
     @AppStorage("muxy.extensionOutputSelected") private var extensionOutputSelectedStored = ""
@@ -189,6 +192,10 @@ struct MainWindow: View {
             .modifier(windowOverlays)
             .modifier(windowChrome)
             .modifier(windowEventListeners)
+            .onAppear(perform: reconcileExtensionTopbarRailOrder)
+            .onChange(of: extensionStore.topbarItems) {
+                reconcileExtensionTopbarRailOrder()
+            }
             .onChange(of: richInputPresentationMode) { _, mode in
                 synchronizeRichInputPresentationMode(mode)
             }
@@ -218,6 +225,7 @@ struct MainWindow: View {
         }
         .animation(.easeInOut(duration: 0.2), value: sidebarExpanded)
         .animation(.easeInOut(duration: 0.2), value: layoutStore.layout)
+        .animation(.easeInOut(duration: 0.2), value: showsExtensionTopbarRail)
     }
 
     private var windowOverlays: MainWindowOverlays {
@@ -503,7 +511,13 @@ struct MainWindow: View {
             Rectangle().fill(MuxyTheme.border).frame(height: 1)
                 .background(AppTransparencyBackground())
 
-            workspaceContent
+            HStack(spacing: 0) {
+                workspaceContent
+                if showsExtensionTopbarRail {
+                    extensionTopbarRailColumn
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -1236,14 +1250,41 @@ struct MainWindow: View {
         }
     }
 
+    private func reconcileExtensionTopbarRailOrder() {
+        let items = extensionStore.topbarItems
+        extensionTopbarRailOrderStore.reconcile(
+            visibleRailIDs: items.filter(\.isRailEligible).map(\.id),
+            visibleNonRailIDs: items.filter { !$0.isRailEligible }.map(\.id)
+        )
+    }
+
+    private var showsExtensionTopbarRail: Bool {
+        showExtensionIconRail && !ExtensionTopbarPlacement.railItems(from: extensionStore.topbarItems).isEmpty
+    }
+
+    private var extensionTopbarRailColumn: some View {
+        ExtensionTopbarRail()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: UIMetrics.extensionIconRailWidth)
+            .clipped()
+            .background(AppTransparencyBackground())
+            .overlay(alignment: .leading) {
+                Rectangle().fill(MuxyTheme.border)
+                    .frame(width: 1)
+                    .accessibilityHidden(true)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
     private var toastEdgePadding: EdgeInsets {
         let big = UIMetrics.scaled(40)
         let small = UIMetrics.spacing7
+        let trailing = showsExtensionTopbarRail ? small + UIMetrics.extensionIconRailWidth : small
         return switch toastPosition {
         case .topCenter: EdgeInsets(top: big, leading: 0, bottom: 0, trailing: 0)
-        case .topRight: EdgeInsets(top: big, leading: 0, bottom: 0, trailing: small)
+        case .topRight: EdgeInsets(top: big, leading: 0, bottom: 0, trailing: trailing)
         case .bottomCenter: EdgeInsets(top: 0, leading: 0, bottom: small, trailing: 0)
-        case .bottomRight: EdgeInsets(top: 0, leading: 0, bottom: small, trailing: small)
+        case .bottomRight: EdgeInsets(top: 0, leading: 0, bottom: small, trailing: trailing)
         }
     }
 

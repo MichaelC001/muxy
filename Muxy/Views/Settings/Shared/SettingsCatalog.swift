@@ -418,6 +418,24 @@ enum SettingsCatalog {
             aliases: ["topbar", "title bar", "tab strip controls", "hide top bar icons"]
         ),
         SettingsCatalogItem(
+            key: TopbarPreferences.railVisibleKey,
+            title: "Show Extension Icon Rail",
+            description: "Shows visible togglePanel extension icons in a right-hand rail below the title bar. "
+                + "Other topbar icons stay in the title bar. Off by default.",
+            category: .appearance,
+            section: "Interface",
+            defaultValue: TopbarPreferences.defaultRailVisible,
+            aliases: ["extension rail", "right rail", "topbar icons", "toggle panel", "panel toggle"]
+        ),
+        SettingsCatalogItem(
+            key: TopbarPreferences.railOrderKey,
+            title: "Extension icon rail order",
+            description: "Saved order of visible togglePanel icons on the right-hand rail.",
+            category: .appearance,
+            section: "Interface",
+            defaultValue: TopbarPreferences.defaultRailOrder
+        ),
+        SettingsCatalogItem(
             key: "muxy.showStatusBar",
             title: "Show Status Bar",
             description: "Shows or hides the status bar.",

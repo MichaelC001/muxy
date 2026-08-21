@@ -7,6 +7,115 @@ import Testing
 @Suite("WorktreeStore")
 @MainActor
 struct WorktreeStoreTests {
+    @Test("ensuring a primary worktree notifies observers")
+    func ensurePrimaryNotifiesObservers() {
+        let project = Project(name: "Repo", path: "/tmp/repo")
+        let store = WorktreeStore(persistence: WorktreePersistenceStub(initial: [:]))
+        var change: (projectID: UUID, worktreeID: UUID?)?
+        store.onWorktreesChanged = { change = ($0, $1) }
+
+        store.ensurePrimary(for: project)
+
+        #expect(change?.projectID == project.id)
+        #expect(change?.worktreeID == store.primary(for: project.id)?.id)
+    }
+
+    @Test("worktree activity persists")
+    func worktreeActivityPersists() throws {
+        let project = Project(name: "Repo", path: "/tmp/repo")
+        let worktree = Worktree(name: project.name, path: project.path, isPrimary: true)
+        let persistence = WorktreePersistenceStub(initial: [project.id: [worktree]])
+        let store = WorktreeStore(persistence: persistence, projects: [project])
+
+        store.markActive(projectID: project.id, worktreeID: worktree.id)
+
+        let lastActiveAt = try #require(store.worktree(projectID: project.id, worktreeID: worktree.id)?.lastActiveAt)
+        let reloaded = WorktreeStore(persistence: persistence, projects: [project])
+        #expect(reloaded.worktree(projectID: project.id, worktreeID: worktree.id)?.lastActiveAt == lastActiveAt)
+    }
+
+    @Test("local path ownership wins over an identical remote path")
+    func localPathOwnershipWinsRemoteCollision() {
+        let sharedPath = "/workspace/api"
+        let local = Project(name: "Local", path: sharedPath)
+        let remote = RemoteProject(name: "Remote", path: sharedPath).asProject(
+            workspaceID: UUID(),
+            sortOrder: 0
+        )
+        let store = WorktreeStore(persistence: WorktreePersistenceStub(initial: [:]))
+
+        store.loadAll(projects: [local, remote])
+
+        #expect(store.projectID(forWorktreePath: sharedPath) == local.id)
+    }
+
+    @Test("project removal only blocks removal preparation for that project")
+    func projectRemovalOnlyBlocksOwnWorktreePreparation() async {
+        let sharedPath = "/workspace/feature"
+        let localProjectID = UUID()
+        let remoteProjectID = UUID()
+        let localWorktree = Worktree(name: "Local", path: sharedPath, isPrimary: false)
+        let remoteWorktree = Worktree(name: "Remote", path: sharedPath, isPrimary: false)
+        let store = WorktreeStore(persistence: WorktreePersistenceStub(initial: [:]))
+        store.add(localWorktree, to: localProjectID)
+        store.add(remoteWorktree, to: remoteProjectID, context: .ssh(SSHDestination(host: "example.com")))
+
+        #expect(await store.beginProjectRemoval(remoteProjectID))
+
+        #expect(store.beginRemovalPreparation(worktree: localWorktree, projectID: localProjectID))
+        #expect(!store.beginRemovalPreparation(worktree: remoteWorktree, projectID: remoteProjectID))
+    }
+
+    @Test("removing a project notifies worktree observers")
+    func removingProjectNotifiesObservers() {
+        let project = Project(name: "Repo", path: "/tmp/repo")
+        let store = WorktreeStore(persistence: WorktreePersistenceStub(initial: [:]))
+        store.ensurePrimary(for: project)
+        var change: (projectID: UUID, worktreeID: UUID?)?
+        store.onWorktreesChanged = { change = ($0, $1) }
+
+        store.removeProject(project.id)
+
+        #expect(change?.projectID == project.id)
+        #expect(change?.worktreeID == nil)
+    }
+
+    @Test("restoring worktrees notifies observers")
+    func restoringWorktreesNotifiesObservers() {
+        let project = Project(name: "Repo", path: "/tmp/repo")
+        let store = WorktreeStore(persistence: WorktreePersistenceStub(initial: [:]))
+        let worktree = Worktree(name: "Repo", path: "/tmp/repo", isPrimary: true)
+        var change: (projectID: UUID, worktreeID: UUID?)?
+        store.onWorktreesChanged = { change = ($0, $1) }
+
+        store.restoreProjectWorktrees([worktree], for: project)
+
+        #expect(change?.projectID == project.id)
+        #expect(change?.worktreeID == nil)
+    }
+
+    @Test("restoring local worktrees owns a path shared with a remote project")
+    func restoringLocalWorktreesOwnsSharedRemotePath() {
+        let sharedPath = "/workspace/api"
+        let local = Project(name: "Local", path: sharedPath)
+        let remote = RemoteProject(name: "Remote", path: sharedPath).asProject(
+            workspaceID: UUID(),
+            sortOrder: 0
+        )
+        let store = WorktreeStore(persistence: WorktreePersistenceStub(initial: [:]))
+
+        store.restoreProjectWorktrees(
+            [Worktree(name: remote.name, path: sharedPath, isPrimary: true)],
+            for: remote
+        )
+        store.restoreProjectWorktrees(
+            [Worktree(name: local.name, path: sharedPath, isPrimary: true)],
+            for: local
+        )
+
+        #expect(store.projectID(forWorktreePath: sharedPath) == local.id)
+    }
+
     @Test("Worktree decodes legacy records without source metadata")
     func worktreeLegacyDecodeDefaultsToMuxy() throws {
         let json = """
@@ -49,6 +158,7 @@ struct WorktreeStoreTests {
 
     @Test("removal preparation serializes a worktree removal lifecycle")
     func removalPreparationSerializesLifecycle() {
+        let projectID = UUID()
         let store = WorktreeStore(persistence: WorktreePersistenceStub(initial: [:]))
         let worktree = Worktree(
             name: "feature",
@@ -56,8 +166,8 @@ struct WorktreeStoreTests {
             isPrimary: false
         )
 
-        #expect(store.beginRemovalPreparation(worktree: worktree))
-        #expect(!store.beginRemovalPreparation(worktree: worktree))
+        #expect(store.beginRemovalPreparation(worktree: worktree, projectID: projectID))
+        #expect(!store.beginRemovalPreparation(worktree: worktree, projectID: projectID))
         #expect(store.hasRemovalPreparation)
         #expect(store.isPreparingRemoval(worktreeID: worktree.id))
         #expect(store.isRemovalInProgress(worktreeID: worktree.id))
@@ -80,7 +190,7 @@ struct WorktreeStoreTests {
         )
         store.add(worktree, to: projectID)
 
-        #expect(store.beginRemovalPreparation(worktree: worktree))
+        #expect(store.beginRemovalPreparation(worktree: worktree, projectID: projectID))
         #expect(store.isPreparingRemoval(worktreeID: worktree.id))
 
         store.remove(worktreeID: worktree.id, from: projectID)
@@ -99,7 +209,7 @@ struct WorktreeStoreTests {
             isPrimary: false
         )
         store.add(worktree, to: projectID)
-        _ = store.beginRemovalPreparation(worktree: worktree)
+        _ = store.beginRemovalPreparation(worktree: worktree, projectID: projectID)
 
         store.removeProject(projectID)
 

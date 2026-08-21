@@ -17,6 +17,11 @@ final class RemoteTerminalStreamer {
     }
 
     private var attachments: [UUID: Attachment] = [:]
+    private var scrollbackBuffers: [UUID: Data] = [:]
+
+    private var scrollbackByteLimit: Int {
+        MobileServerService.shared.scrollbackCapMB * 1_048_576
+    }
 
     init() {}
 
@@ -39,11 +44,36 @@ final class RemoteTerminalStreamer {
     }
 
     private func forward(paneID: UUID, bytes: Data) {
+        appendScrollback(paneID: paneID, bytes: bytes, byteLimit: scrollbackByteLimit)
+
         guard let clientID = PaneOwnershipStore.shared.remoteOwner(for: paneID) else { return }
         let event = MuxyEvent(
             event: .terminalOutput,
             data: .terminalOutput(TerminalOutputEventDTO(paneID: paneID, bytes: bytes))
         )
         server?.send(event, to: clientID)
+    }
+
+    func appendScrollback(paneID: UUID, bytes: Data, byteLimit: Int) {
+        scrollbackBuffers[paneID, default: Data()].append(bytes)
+        guard let count = scrollbackBuffers[paneID]?.count, count > byteLimit else { return }
+        let trimTarget = max(byteLimit * 3 / 4, 1)
+        scrollbackBuffers[paneID]?.removeFirst(count - trimTarget)
+    }
+
+    func scrollbackData(for paneID: UUID) -> Data? {
+        scrollbackBuffers[paneID]
+    }
+
+    func trimAllScrollback(toByteLimit byteLimit: Int) {
+        let trimTarget = max(byteLimit * 3 / 4, 1)
+        for paneID in scrollbackBuffers.keys {
+            guard let count = scrollbackBuffers[paneID]?.count, count > byteLimit else { continue }
+            scrollbackBuffers[paneID]?.removeFirst(count - trimTarget)
+        }
+    }
+
+    func resetPane(_ paneID: UUID) {
+        scrollbackBuffers.removeValue(forKey: paneID)
     }
 }
